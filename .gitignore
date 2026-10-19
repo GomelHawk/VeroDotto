@@ -1,0 +1,5 @@
+.DS_Store
+*.swp
+.idea
+# written by Claude Code beside a mod it loads from this folder; extends a git-ignored file
+plugins/vero-dotto/tsconfig.json

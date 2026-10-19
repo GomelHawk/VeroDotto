@@ -1,0 +1,5 @@
+Budget
+People
+Laptops
+Engineer
+| Total | =SUM(B2:B3) |

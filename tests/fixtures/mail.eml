@@ -1,0 +1,36 @@
+From: Ada <ada@example.com>
+To: team@example.com
+Subject: Launch checklist
+MIME-Version: 1.0
+Content-Type: multipart/mixed; boundary="===============7272432395326429223=="
+
+--===============7272432395326429223==
+Content-Type: multipart/alternative;
+ boundary="===============6326036816121552444=="
+
+--===============6326036816121552444==
+Content-Type: text/plain; charset="utf-8"
+Content-Transfer-Encoding: 7bit
+
+Hi all,
+
+The launch is on Friday.
+
+--===============6326036816121552444==
+Content-Type: text/html; charset="utf-8"
+Content-Transfer-Encoding: 7bit
+MIME-Version: 1.0
+
+<p>Hi all,</p><p>The launch is on <b>Friday</b>.</p>
+
+--===============6326036816121552444==--
+
+--===============7272432395326429223==
+Content-Type: text/csv
+Content-Transfer-Encoding: base64
+Content-Disposition: attachment; filename="plan.csv"
+MIME-Version: 1.0
+
+Y29sCjEK
+
+--===============7272432395326429223==--

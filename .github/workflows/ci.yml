@@ -1,0 +1,156 @@
+name: CI
+
+on:
+  push:
+    branches: [main]
+  pull_request:
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+concurrency:
+  group: ci-${{ github.ref }}
+  cancel-in-progress: true
+
+jobs:
+  manifests:
+    name: Plugin manifests
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+
+      - uses: actions/setup-node@820762786026740c76f36085b0efc47a31fe5020 # v7.0.0
+        with:
+          node-version: '22'
+
+      # Deliberately the newest release: the mod API is early access, and a change in it
+      # should fail here before it reaches a user. The log names the version that ran.
+      - name: Install Claude Code CLI
+        run: |
+          npm install -g @anthropic-ai/claude-code
+          claude --version
+
+      # `claude plugin validate` reads local files only - no account, no API key.
+      - name: Validate the plugin manifest, hooks module and state contract
+        run: claude plugin validate ./plugins/vero-dotto
+
+      - name: Validate again, warnings as errors
+        run: claude plugin validate ./plugins/vero-dotto --strict
+
+      # The module's TypeScript, run against the engine itself: no account, no API key.
+      - name: Test the hooks module
+        run: claude plugin test ./plugins/vero-dotto
+
+  shell:
+    name: Shell lint
+    runs-on: ubuntu-latest
+    env:
+      SCRIPTS: install.sh uninstall.sh tests/smoke.sh tests/convert.sh plugins/vero-dotto/scripts/verodotto.sh
+    steps:
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+
+      - name: Parse every script
+        run: |
+          for f in $SCRIPTS; do
+            echo "bash -n $f"
+            bash -n "$f"
+          done
+
+      # macOS runs /bin/bash 3.2. bash 5 and ShellCheck accept things 3.2 cannot parse
+      # (a quote in a comment inside a multi-line $( ) - the VeroDiff 1.1.2 lesson).
+      - name: Parse every script with bash 3.2
+        run: |
+          for f in $SCRIPTS; do
+            echo "bash 3.2 -n $f"
+            docker run --rm -v "$PWD":/r:ro bash:3.2 bash -n "/r/$f"
+          done
+
+      - name: ShellCheck
+        run: |
+          shellcheck --version
+          shellcheck -s bash -S warning $SCRIPTS
+
+  python:
+    name: Python lint
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+
+      - name: Ruff
+        run: pipx run ruff check --line-length 130 plugins/vero-dotto/scripts/convert.py tests/make-fixtures.py
+
+      - name: Compile
+        run: python3 -m py_compile plugins/vero-dotto/scripts/convert.py tests/make-fixtures.py
+
+  smoke:
+    # macOS is not decoration: verodotto.sh takes its `shasum` and BSD `stat` branches
+    # there, and runs under bash 3.2.
+    name: Smoke (${{ matrix.os }})
+    runs-on: ${{ matrix.os }}
+    strategy:
+      fail-fast: false
+      matrix:
+        os: [ubuntu-latest, macos-latest]
+    steps:
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+
+      - name: Run the smoke test
+        run: tests/smoke.sh
+
+  convert:
+    # The only place the uv download, its checksum and every converter run for real, on
+    # each OS a user has.
+    name: Convert (${{ matrix.os }})
+    runs-on: ${{ matrix.os }}
+    strategy:
+      fail-fast: false
+      matrix:
+        os: [ubuntu-latest, macos-latest, windows-latest]
+    defaults:
+      run:
+        shell: bash
+    steps:
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+
+      - uses: actions/cache@55cc8345863c7cc4c66a329aec7e433d2d1c52a9 # v6.1.0
+        with:
+          path: ${{ runner.temp }}/verodotto/uv-cache
+          key: uv-${{ runner.os }}-${{ hashFiles('plugins/vero-dotto/scripts/convert.py') }}
+
+      - name: Set up from scratch and convert every fixture
+        run: VERODOTTO_DIR="$RUNNER_TEMP/verodotto" tests/convert.sh
+
+  endings:
+    name: Line endings and permissions
+    runs-on: ubuntu-latest
+    steps:
+      # A clone with core.autocrlf=true is what a Windows user gets. Without
+      # .gitattributes it hands them scripts that die on "/usr/bin/env: 'bash\r'".
+      # The commit under test, not the default branch: for a pull request github.sha is
+      # its merge commit, which GitHub serves by hash.
+      - name: Check out the way a Windows user would
+        run: |
+          git init -q checkout
+          git -C checkout config core.autocrlf true
+          git -C checkout fetch -q --depth 1 "${{ github.server_url }}/${{ github.repository }}" "${{ github.sha }}"
+          git -C checkout checkout -q FETCH_HEAD
+
+      - name: No CRLF reached the working tree
+        working-directory: checkout
+        run: |
+          bad=0
+          for f in install.sh uninstall.sh tests/smoke.sh tests/convert.sh \
+                   plugins/vero-dotto/scripts/verodotto.sh plugins/vero-dotto/scripts/convert.py; do
+            if grep -q $'\r$' "$f"; then echo "CRLF in $f"; bad=1; else echo "LF ok: $f"; fi
+          done
+          for f in install.sh uninstall.sh tests/smoke.sh tests/convert.sh plugins/vero-dotto/scripts/verodotto.sh; do
+            if [ ! -x "$f" ]; then echo "not executable: $f"; bad=1; fi
+          done
+          exit "$bad"
+
+      # With nothing set up the script must still answer, and say so.
+      - name: The script actually runs from that clone
+        working-directory: checkout
+        run: |
+          VERODOTTO_DIR="$RUNNER_TEMP/vd" ./plugins/vero-dotto/scripts/verodotto.sh status | grep -qx missing

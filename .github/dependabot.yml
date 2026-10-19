@@ -1,0 +1,18 @@
+version: 2
+
+# The Python converters are pinned in convert.py's PEP 723 header, which Dependabot does
+# not read (CLAUDE.md's release procedure checks them by hand). What it can watch is the
+# actions the CI workflow pins.
+updates:
+  - package-ecosystem: github-actions
+    directory: /
+    schedule:
+      interval: weekly
+    commit-message:
+      prefix: ci
+    labels:
+      - dependencies
+    groups:
+      actions:
+        patterns:
+          - "*"

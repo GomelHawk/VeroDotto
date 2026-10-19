@@ -1,0 +1,84 @@
+{
+  "name": "vero-dotto",
+  "displayName": "VeroDotto",
+  "description": "Read true. Spend less. Claude reads your docx, pdf, spreadsheets and OpenDocument files as clean markdown - converted automatically, cached, with the token saving shown.",
+  "version": "1.0.0",
+  "author": {
+    "name": "Dmitry Koshelenko",
+    "url": "https://github.com/GomelHawk"
+  },
+  "homepage": "https://github.com/GomelHawk/VeroDotto",
+  "repository": "https://github.com/GomelHawk/VeroDotto",
+  "license": "MIT",
+  "keywords": [
+    "docx",
+    "pdf",
+    "xlsx",
+    "pptx",
+    "markdown",
+    "tokens"
+  ],
+  "types": "./types/index.d.ts",
+  "userConfig": {
+    "autoSetup": {
+      "type": "boolean",
+      "title": "Set up converters automatically",
+      "description": "Download uv, Python and the converters (~240 MB, once) into ~/.cache/verodotto on the first session. Off: only /vero-dotto setup does it.",
+      "default": true
+    },
+    "minSavingPercent": {
+      "type": "number",
+      "title": "Minimum saving, percent",
+      "description": "Below this estimated token saving the original file is read as it is.",
+      "default": 10
+    },
+    "maxFileMb": {
+      "type": "number",
+      "title": "Largest file converted, MB",
+      "description": "A document larger than this is read as it is, and you are told it was skipped.",
+      "default": 100
+    },
+    "maxSheetCells": {
+      "type": "number",
+      "title": "Largest sheet converted in full, cells",
+      "description": "A spreadsheet with a sheet over this many cells is summarised instead.",
+      "default": 5000
+    },
+    "maxSheetRows": {
+      "type": "number",
+      "title": "Rows per sheet in a summary",
+      "description": "How many rows of each sheet a spreadsheet summary shows.",
+      "default": 20
+    },
+    "maxTokens": {
+      "type": "number",
+      "title": "Largest spreadsheet conversion, tokens",
+      "description": "A spreadsheet whose markdown is estimated above this is summarised instead.",
+      "default": 50000
+    },
+    "bandForReads": {
+      "type": "boolean",
+      "title": "Band for files Claude opens itself",
+      "description": "Also show the saving above the prompt for documents Claude read on its own, not only those named in your prompt.",
+      "default": false
+    },
+    "cacheDays": {
+      "type": "number",
+      "title": "Keep unused conversions, days",
+      "description": "Conversions not used for this long are removed by the daily clean-up.",
+      "default": 10
+    },
+    "cacheMaxMb": {
+      "type": "number",
+      "title": "Conversion cache cap, MB",
+      "description": "Above this size the least recently used conversions are removed. The converters themselves are never counted or removed.",
+      "default": 100
+    },
+    "convertTimeoutSec": {
+      "type": "number",
+      "title": "Conversion time limit, seconds",
+      "description": "A conversion that takes longer is stopped and the original file is read instead.",
+      "default": 100
+    }
+  }
+}
