@@ -295,6 +295,10 @@ Bash without the note (8). The Bash nudge ships in 1.0 by the owner's decision.
   CI parses each script under `bash:3.2` in docker.
 - **Cut text by characters, never `cut -c`** on user text (GNU cut counts bytes). The
   script cuts only hex hashes.
+- **`sha256sum` and `shasum` prefix their line with `\\` when the file name holds a backslash**,
+  which every Windows path does, so `sha256_file()` drops a leading backslash from the
+  hash; the uv download's checksum check failed on the Windows runner with
+  `got \\7c38...` before it did.
 - **`sha256sum`, else `shasum -a 256`**; **GNU `stat -c`, else BSD `stat -f`**. macOS CI is
   the only place the second branches run.
 - **On Windows** Claude Code runs Git Bash; the module calls `CLAUDE_CODE_GIT_BASH_PATH`

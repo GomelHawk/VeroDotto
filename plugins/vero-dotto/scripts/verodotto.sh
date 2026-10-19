@@ -59,10 +59,12 @@ uv_sha() {
 
 # --- hashing -------------------------------------------------------------------------
 
-# sha256sum (Linux, Git Bash), else shasum (macOS).
+# sha256sum (Linux, Git Bash), else shasum (macOS). Both prefix the line with a backslash
+# when the file's name holds one - every Windows path does (D:\a\_temp\...) - so the
+# hash is read with that backslash dropped.
 sha256_file() {
-  if command -v sha256sum >/dev/null 2>&1; then sha256sum "$1" | cut -d' ' -f1
-  elif command -v shasum >/dev/null 2>&1; then shasum -a 256 "$1" | cut -d' ' -f1
+  if command -v sha256sum >/dev/null 2>&1; then sha256sum "$1" | cut -d' ' -f1 | sed 's/^\\//'
+  elif command -v shasum >/dev/null 2>&1; then shasum -a 256 "$1" | cut -d' ' -f1 | sed 's/^\\//'
   else return 1; fi
 }
 sha256_text() {

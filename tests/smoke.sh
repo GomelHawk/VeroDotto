@@ -103,6 +103,15 @@ done
   || no "no top-level bin/ in the plugin" "organization distribution rejects it"
 
 echo
+echo "== hashing =="
+
+# A file name holding a backslash - every Windows path - makes sha256sum and shasum prefix
+# their line with one, and the uv download's checksum then never matches. The hash must
+# come back clean. The function is lifted out of the script, which otherwise dispatches.
+BS="$WORK/back\\slash.bin"; printf 'hello' > "$BS"
+got="$(bash -c 'eval "$(sed -n "/^sha256_file()/,/^}/p" "$1")"; sha256_file "$2"' _ "$VD" "$BS")"
+is "a backslash in the file name leaves the hash clean" "$got" "2cf24dba5fb0a30e26e83b2ac5b9e29e1b161e5c1fa7425e73043362938b9824"
+
 echo "== where =="
 
 is "VERODOTTO_DIR wins" "$(bash "$VD" where)" "$WORK/cache"
