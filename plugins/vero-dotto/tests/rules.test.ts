@@ -217,7 +217,8 @@ describe('options', () => {
       maxSheetCells: 5000,
       maxSheetRows: 20,
       maxTokens: 50000,
-      bandForReads: false,
+      bandForReads: true,
+      bandSeconds: 120,
       cacheDays: 10,
       cacheMaxMb: 100,
       convertTimeoutSec: 100,
@@ -273,7 +274,15 @@ describe('paths', () => {
     expect(resolvePath('/repo', '/home/me', '~/x.pdf')).toBe('/home/me/x.pdf')
     expect(resolvePath('/repo', '/home/me', '/abs/a.pdf')).toBe('/abs/a.pdf')
     expect(resolvePath('C:\\repo', 'C:\\Users\\me', 'docs\\a.docx')).toBe('C:\\repo\\docs\\a.docx')
-    expect(resolvePath('/repo', '/home/me', 'C:/x/a.docx')).toBe('C:\\x\\a.docx')
+    expect(resolvePath('C:\\repo', 'C:\\Users\\me', 'D:/x/a.docx')).toBe('D:\\x\\a.docx')
+  })
+  test('a Windows path in a POSIX session is read under the drive mount, as WSL has it', () => {
+    expect(resolvePath('/repo', '/home/me', 'C:/x/a.docx')).toBe('/mnt/c/x/a.docx')
+    expect(resolvePath('/repo', '/home/me', 'C:\\Users\\dmitr\\OneDrive\\Документы\\Cirrus\\NIS-935.docx')).toBe(
+      '/mnt/c/Users/dmitr/OneDrive/Документы/Cirrus/NIS-935.docx',
+    )
+    expect(resolvePath('/home/me/work', '/home/me', 'd:\\a\\..\\b\\spec.pdf')).toBe('/mnt/d/b/spec.pdf')
+    expect(resolvePath('/repo', '/home/me', '\\\\server\\share\\a.docx')).toBe('\\\\server\\share\\a.docx')
   })
   test('mentions are read as typed after the @', () => {
     expect(mentionsOf('read @docs/spec.docx and @"my file.pdf" and @a.docx#L10-20')).toEqual(['docs/spec.docx', 'my file.pdf', 'a.docx'])

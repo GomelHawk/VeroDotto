@@ -158,11 +158,14 @@ PDF pages × 1,600 + text, Office/ODF raw XML text (a floor), HTML/RTF/eml raw t
   Before redirecting it asks `$.tool.check` for the **original**: a deny stands (no
   redirect); otherwise the verdict is remembered in `redirects`, and the `tool.check
   {Read}` hook answers the cache path with it - so the redirect asks exactly when a Read of
-  the original would have. Context once per file per session (`view.toldAbout`). No band
-  unless `bandForReads`.
-- **The band's lifetime**: `turn.complete` (main agent) sets `view.isBandStale`; the next
-  prompt's first event - a mention, the submit, or a band-drawing Read - clears it
-  (`freshBand()`). Never cleared at submit unconditionally: see the event-order gotcha.
+  the original would have. Context once per file per session (`view.toldAbout`). A band
+  row too, unless `bandForReads` is off.
+- **The band's lifetime**: each item is stamped with `$.clock.now()` and the prompt it
+  appeared at (`view.prompts`). `turn.complete` (main agent) sets `view.isBandStale`; the
+  next prompt's first event - a mention, the submit, or a band-drawing Read - counts the
+  prompt and drops the items that are neither within the last `BAND_PROMPTS` (2) prompts
+  nor younger than `bandSeconds` (`freshBand()`); × drops them all. Never done at submit
+  unconditionally: see the event-order gotcha.
 - `prompt.submit` → `freshBand()`; `findPaths()` on the text (fenced code and `@`
   mentions left out), resolved against the session root, existing and convertible, at
   most 10: one context line each, never the content, and a background conversion kept in
@@ -200,10 +203,10 @@ marketplace (`view.legacy`). Stopped = `foreign` or a legacy copy: every hook's 
 is `next(e)` (no status call, no setup, no conversion, no note, no prune, nothing written
 to the cache); `session.start` registers the command and shows one toast; `/vero-dotto`
 answers `stoppedMarkdown()` / `legacyMarkdown()` whatever the subcommand; the band draws
-the stopped row every session, with no × - `stoppedBand()` and three buttons
-(`vd-move:1..3`, `MOVE_LABELS`) that fill `moveSteps()` into the prompt box with
-`$.prompt.fill` (`replace`), or `legacyBand()` and one button (`vd-move:remove`,
-`removeStep()`); a draft in the box is asked about first (`view.confirmingFill`,
+the stopped row every session, with no × - `stoppedBand()` and four buttons
+(`vd-move:1..4`, `MOVE_LABELS`) that fill `moveSteps()` into the prompt box with
+`$.prompt.fill` (`replace`), or `legacyBand()` and two buttons (`vd-move:remove-1..2`,
+`removeSteps()`); a draft in the box is asked about first (`view.confirmingFill`,
 `REPLACE_QUESTION`, `vd-move:replace` / `vd-move:cancel`); a refused fill toasts
 `fillRefusedToast()`. Nothing runs by itself. The next `turn.start` after the move
 resumes normal work, preparing as a session start would.

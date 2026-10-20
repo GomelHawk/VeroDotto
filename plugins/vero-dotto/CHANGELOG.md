@@ -1,5 +1,20 @@
 # Changelog
 
+## 1.0.1 - 2026-10-20
+
+### Changed
+
+- **A Windows path works in a WSL session.** `C:\Users\…\spec.docx` written in a prompt
+  on WSL is read under `/mnt/c/…`, so the row and the early conversion follow it as they
+  do for any other path.
+- **The row shows for documents Claude opens itself.** `bandForReads` is on by default;
+  off keeps the row for documents named in your prompt only.
+- **The row stays a while.** It survives your next two prompts, or two minutes, whichever
+  is longer (`bandSeconds`), instead of going at the next prompt; × still closes it at once.
+- **The move row has four buttons.** After the old copy is removed, a fourth button
+  removes the marketplace it came from, so nothing of it stays behind. A copy from
+  VeroPlugins that finds an older copy of itself offers the same two removals.
+
 ## 1.0.0 - 2026-10-14
 
 Claude reads your documents as clean markdown - Word, Excel, PowerPoint, PDF,

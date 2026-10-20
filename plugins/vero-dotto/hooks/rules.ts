@@ -42,6 +42,7 @@ export type Config = {
   maxSheetRows: number
   maxTokens: number
   bandForReads: boolean
+  bandSeconds: number
   cacheDays: number
   cacheMaxMb: number
   convertTimeoutSec: number
@@ -54,7 +55,8 @@ export const DEFAULTS: Config = {
   maxSheetCells: 5000,
   maxSheetRows: 20,
   maxTokens: 50000,
-  bandForReads: false,
+  bandForReads: true,
+  bandSeconds: 120,
   cacheDays: 10,
   cacheMaxMb: 100,
   convertTimeoutSec: 100,
@@ -76,6 +78,7 @@ export function configOf(options: Readonly<Record<string, unknown>> = {}): Confi
     maxSheetRows: Math.round(num('maxSheetRows', 1, 10_000)),
     maxTokens: Math.round(num('maxTokens', 100, 10_000_000)),
     bandForReads: bool('bandForReads'),
+    bandSeconds: num('bandSeconds', 0, 3600),
     cacheDays: num('cacheDays', 1, 3650),
     cacheMaxMb: num('cacheMaxMb', 1, 1_000_000),
     convertTimeoutSec: num('convertTimeoutSec', 5, 590),
@@ -410,7 +413,8 @@ export function mentionsOf(text: string): string[] {
 const isAbsolute = (path: string) => path.startsWith('/') || /^[A-Za-z]:[\\/]/.test(path) || path.startsWith('\\\\')
 
 // A path from a prompt made absolute against the session's folder: `~` is the home
-// folder, a Windows path stays as written, `.` and `..` are folded.
+// folder, `.` and `..` are folded. A Windows drive path stays as written in a Windows
+// session; in a POSIX session (WSL) it is read under the drive's mount, `/mnt/c/...`.
 export function resolvePath(root: string, home: string, path: string): string {
   let full = path
   if (path === '~' || path.startsWith('~/') || path.startsWith('~\\')) full = home + path.slice(1)
@@ -427,7 +431,10 @@ export function resolvePath(root: string, home: string, path: string): string {
     }
     parts.push(part)
   }
-  return lead + parts.join(sep)
+  const resolved = lead + parts.join(sep)
+  const drive = /^([A-Za-z]):\\(.*)$/.exec(resolved)
+  if (drive !== null && root.startsWith('/')) return `/mnt/${drive[1].toLowerCase()}/${drive[2].split('\\').join('/')}`
+  return resolved
 }
 
 // --- safety ----------------------------------------------------------------------------

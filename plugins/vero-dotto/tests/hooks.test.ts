@@ -386,8 +386,8 @@ for (const surface of ['terminal', 'desktop'] as const) {
   })
 
   describe(`the band on ${surface}`, () => {
-    test('drawn after a conversion, gone after the next prompt', async ($, on) => {
-      fakeWorld(on)
+    test('drawn after a conversion; stays through the next two prompts', async ($, on) => {
+      const seen = fakeWorld(on)
       await start($)
       const ui = await band($)
       // the engine's own order: a prompt's mentions are read before prompt.submit
@@ -401,23 +401,72 @@ for (const surface of ['terminal', 'desktop'] as const) {
         }),
       ).toBeDefined()
       await endTurn($)
-      // still there after the turn, until the next prompt
+      // still there after the turn, and through two quick follow-ups well past the two minutes
       expect(await ui.find({ key: 'vd-hide-band' })).toBeDefined()
+      await seen.clock.advance(10 * 60_000)
       await submit($, 'thanks')
+      await endTurn($)
+      expect(await ui.find({ key: 'vd-hide-band' })).toBeDefined()
+      await submit($, 'and?')
+      await endTurn($)
+      expect(await ui.find({ key: 'vd-hide-band' })).toBeDefined()
+      // the third prompt after it, past the two minutes: gone
+      await submit($, 'ok')
       expect(await ui.find({ key: 'vd-hide-band' })).toBeUndefined()
     })
 
-    test('the next prompt\'s mention replaces the band, whichever event comes first', async ($, on) => {
+    test('within two minutes it survives any number of prompts', async ($, on) => {
+      const seen = fakeWorld(on)
+      await start($)
+      const ui = await band($)
+      await mention($, SPEC)
+      await endTurn($)
+      for (const text of ['a', 'b', 'c', 'd', 'e']) {
+        await seen.clock.advance(20_000)
+        await submit($, text)
+        await endTurn($)
+        expect(await ui.find({ key: 'vd-hide-band' })).toBeDefined()
+      }
+      // 120 s after it, three prompts on: gone at the next prompt
+      await seen.clock.advance(20_000)
+      await submit($, 'f')
+      expect(await ui.find({ key: 'vd-hide-band' })).toBeUndefined()
+    })
+
+    test('bandSeconds 0 keeps the row for the two prompts only', { options: { bandSeconds: 0 } }, async ($, on) => {
+      fakeWorld(on)
+      await start($)
+      const ui = await band($)
+      await mention($, SPEC)
+      await endTurn($)
+      await submit($, 'a')
+      await endTurn($)
+      await submit($, 'b')
+      await endTurn($)
+      expect(await ui.find({ key: 'vd-hide-band' })).toBeDefined()
+      await submit($, 'c')
+      expect(await ui.find({ key: 'vd-hide-band' })).toBeUndefined()
+    })
+
+    test('the next prompt\'s mention joins the band, whichever event comes first; each item ages on its own', async ($, on) => {
       const other = '/repo/b.xlsx'
-      fakeWorld(on, { files: { [SPEC]: 1, [other]: 1 }, conversions: { [SPEC]: {}, [other]: { ext: '.xlsx' } } })
+      const seen = fakeWorld(on, { files: { [SPEC]: 1, [other]: 1 }, conversions: { [SPEC]: {}, [other]: { ext: '.xlsx' } } })
       await start($)
       const ui = await band($)
       await mention($, SPEC)
       await submit($, '@docs/spec.docx')
       await endTurn($)
+      await seen.clock.advance(10 * 60_000)
       await mention($, other)
       await submit($, '@b.xlsx')
+      await endTurn($)
 
+      expect(await ui.find({ type: 'Text', text: /^2 files \u2192 markdown/ })).toBeDefined()
+      // two prompts on and past the two minutes, the first item is gone and the second stays
+      await seen.clock.advance(10 * 60_000)
+      await submit($, 'a')
+      await endTurn($)
+      await submit($, 'b')
       expect(await ui.find({ type: 'Text', text: /^b\.xlsx \u2192 markdown/ })).toBeDefined()
       expect(await ui.find({ type: 'Text', text: /spec\.docx/ })).toBeUndefined()
     })
@@ -533,20 +582,20 @@ for (const surface of ['terminal', 'desktop'] as const) {
       expect(seen.toolReads).toEqual([SPEC])
     })
 
-    test('a file Claude opened itself draws no band by default', async ($, on) => {
-      fakeWorld(on)
-      await start($)
-      const ui = await band($)
-      await readFile($, SPEC)
-      expect(await ui.find({ key: 'vd-hide-band' })).toBeUndefined()
-    })
-
-    test('with bandForReads it does', { options: { bandForReads: true } }, async ($, on) => {
+    test('a file Claude opened itself draws the band by default', async ($, on) => {
       fakeWorld(on)
       await start($)
       const ui = await band($)
       await readFile($, SPEC)
       expect(await ui.find({ key: 'vd-hide-band' })).toBeDefined()
+    })
+
+    test('with bandForReads off it does not', { options: { bandForReads: false } }, async ($, on) => {
+      fakeWorld(on)
+      await start($)
+      const ui = await band($)
+      await readFile($, SPEC)
+      expect(await ui.find({ key: 'vd-hide-band' })).toBeUndefined()
     })
   })
 
@@ -569,6 +618,19 @@ for (const surface of ['terminal', 'desktop'] as const) {
 
       expect(seen.toolReads).toEqual([MD])
       expect(seen.ran.filter(argv => argv[2] === 'convert').length).toBe(1)
+    })
+
+    test('a Windows path pasted into a WSL session is found under /mnt', async ($, on) => {
+      const wsl = '/mnt/c/Users/me/OneDrive/Документы/NIS-935.docx'
+      const seen = fakeWorld(on, { files: { [wsl]: 1 }, conversions: { [wsl]: {} } })
+      await start($)
+      await submit($, 'specification file: C:\\Users\\me\\OneDrive\\Документы\\NIS-935.docx')
+      await settle($)
+
+      expect(seen.contexts).toEqual([['C:\\Users\\me\\OneDrive\\Документы\\NIS-935.docx is available as markdown through Read (VeroDotto).']])
+      expect(seen.ran.filter(argv => argv[2] === 'convert').length).toBe(1)
+      const ui = await band($)
+      expect(await ui.find({ key: 'vd-hide-band' })).toBeDefined()
     })
 
     test('a missing file adds nothing', async ($, on) => {
@@ -742,6 +804,7 @@ for (const surface of ['terminal', 'desktop'] as const) {
       '/plugin marketplace add GomelHawk/VeroPlugins',
       '/plugin install vero-dotto@vero-plugins',
       '/plugin uninstall vero-dotto@some-marketplace',
+      '/plugin marketplace remove some-marketplace',
     ]
 
     test('a copy from another marketplace does nothing: no setup, no conversion, no note, one toast', async ($, on) => {
@@ -776,7 +839,7 @@ for (const surface of ['terminal', 'desktop'] as const) {
       expect(seen.ran).toEqual([])
     })
 
-    test('the band shows the three buttons and no \u00d7; each fills exactly its command', async ($, on) => {
+    test('the band shows the four buttons and no \u00d7; each fills exactly its command', async ($, on) => {
       const seen = fakeWorld(on, { testRoot: FOREIGN })
       await start($)
       const ui = await band($)
@@ -784,7 +847,7 @@ for (const surface of ['terminal', 'desktop'] as const) {
       expect(await ui.find({ type: 'Text', text: 'then restart Claude Code' })).toBeDefined()
       expect(await ui.find({ key: 'vd-hide-band' })).toBeUndefined()
       expect(await ui.find({ type: 'Button', text: '\u00d7' })).toBeUndefined()
-      for (const [i, label] of ['1 \u2193 Add VeroPlugins', '2 \u2193 Install from VeroPlugins', '3 \u2193 Remove this copy'].entries()) {
+      for (const [i, label] of ['1 \u2193 Add VeroPlugins', '2 \u2193 Install from VeroPlugins', '3 \u2193 Remove this copy', '4 \u2193 Remove the old marketplace'].entries()) {
         expect(await ui.find({ key: `vd-move:${i + 1}`, text: label })).toBeDefined()
         await ui.press({ key: `vd-move:${i + 1}` })
       }
@@ -832,7 +895,7 @@ for (const surface of ['terminal', 'desktop'] as const) {
       expect(await ui.find({ key: 'vd-move:1' })).toBeUndefined()
     })
 
-    test('a home copy beside an old copy of itself pauses with one Remove button', async ($, on) => {
+    test('a home copy beside an old copy of itself pauses with two Remove buttons', async ($, on) => {
       const world: World = { testRoot: HOME, settings: { project: { enabledPlugins: { 'vero-dotto@old-place': true } } } }
       const seen = fakeWorld(on, world)
       await start($)
@@ -843,16 +906,22 @@ for (const surface of ['terminal', 'desktop'] as const) {
       expect(seen.toasts).toEqual(['VeroDotto is paused: an old copy from old-place is still installed. See the band above the prompt.'])
       expect(await ui.find({ type: 'Text', text: '\u26d4 VeroDotto is paused - an old copy from old-place is still installed. Remove it, then restart.' })).toBeDefined()
       expect(await ui.find({ key: 'vd-move:1' })).toBeUndefined()
-      await ui.press({ key: 'vd-move:remove' })
-      expect(seen.filled).toEqual([['/plugin uninstall vero-dotto@old-place --scope project', 'replace']])
-      expect((await run($, '')).text).toContain('/plugin uninstall vero-dotto@old-place --scope project')
+      expect(await ui.find({ key: 'vd-move:remove-1', text: '1 \u2193 Remove the old copy' })).toBeDefined()
+      expect(await ui.find({ key: 'vd-move:remove-2', text: '2 \u2193 Remove the old marketplace' })).toBeDefined()
+      await ui.press({ key: 'vd-move:remove-1' })
+      await ui.press({ key: 'vd-move:remove-2' })
+      expect(seen.filled).toEqual([
+        ['/plugin uninstall vero-dotto@old-place --scope project', 'replace'],
+        ['/plugin marketplace remove old-place', 'replace'],
+      ])
+      expect((await run($, '')).text).toContain('/plugin uninstall vero-dotto@old-place --scope project\n    /plugin marketplace remove old-place')
 
       world.settings = {}
       await $.turn.start({ turnId: 't2', text: 'next' } as never)
       await settle($)
       await mention($, SPEC)
       expect(seen.mentionReads).toEqual([SPEC, MD])
-      expect(await ui.find({ key: 'vd-move:remove' })).toBeUndefined()
+      expect(await ui.find({ key: 'vd-move:remove-1' })).toBeUndefined()
     })
 
     test('a working copy re-reads its source at most every 10 seconds', async ($, on) => {
@@ -873,7 +942,7 @@ for (const surface of ['terminal', 'desktop'] as const) {
       await mention($, SPEC)
       expect(seen.mentionReads).toEqual([MD, SPEC])
       const ui = await band($)
-      expect(await ui.find({ key: 'vd-move:remove' })).toBeDefined()
+      expect(await ui.find({ key: 'vd-move:remove-1' })).toBeDefined()
     })
 
     test('a development copy and a home copy work as before', async ($, on) => {

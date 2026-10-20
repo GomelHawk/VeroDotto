@@ -2,7 +2,7 @@
   "name": "vero-dotto",
   "displayName": "VeroDotto",
   "description": "Read true. Spend less. Claude reads your docx, pdf, spreadsheets and OpenDocument files as clean markdown - converted automatically, cached, with the token saving shown.",
-  "version": "1.0.0",
+  "version": "1.0.1",
   "author": {
     "name": "Dmitry Koshelenko",
     "url": "https://github.com/GomelHawk"
@@ -59,8 +59,14 @@
     "bandForReads": {
       "type": "boolean",
       "title": "Band for files Claude opens itself",
-      "description": "Also show the saving above the prompt for documents Claude read on its own, not only those named in your prompt.",
-      "default": false
+      "description": "Show the saving above the prompt for documents Claude read on its own too. Off: only for documents named in your prompt.",
+      "default": true
+    },
+    "bandSeconds": {
+      "type": "number",
+      "title": "Keep the row this long, seconds",
+      "description": "The row above the prompt stays through your next two prompts, or this many seconds, whichever is longer. 0: two prompts only.",
+      "default": 120
     },
     "cacheDays": {
       "type": "number",

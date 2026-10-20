@@ -2,6 +2,9 @@ import { atom, read, update } from 'claude-code'
 import type { EngineInterface, Register } from 'claude-code'
 
 import type { BandItem, Meta, Stats, View } from '../types'
+
+// A band item before showInBand stamps it with the time and the prompt.
+type BandDraft = Omit<BandItem, 'at' | 'prompt'>
 import {
   CONVERTED,
   EMPTY_STATS,
@@ -42,7 +45,7 @@ import {
 import type { Config, Converted } from './rules'
 import {
   MOVE_LABELS,
-  REMOVE_LABEL,
+  REMOVE_LABELS,
   REPLACE_NO,
   REPLACE_QUESTION,
   REPLACE_YES,
@@ -53,7 +56,7 @@ import {
   legacyMarkdown,
   legacyToast,
   moveSteps,
-  removeStep,
+  removeSteps,
   sourceOf,
   stoppedBand,
   stoppedMarkdown,
@@ -96,6 +99,7 @@ const INITIAL: View = {
   confirmingFill: '',
   isPaused: false,
   isBandStale: false,
+  prompts: 0,
   setupStep: '',
   setupElapsed: 0,
   isSetupNoteHidden: false,
@@ -413,7 +417,7 @@ async function convertOutcome($: EngineInterface, cfg: Config, path: string, has
   return { kind: 'served', md: mdPathOf(conv.docDir), conv }
 }
 
-function itemOf(path: string, outcome: Outcome): BandItem | undefined {
+function itemOf(path: string, outcome: Outcome): BandDraft | undefined {
   const name = baseName(path)
   if (outcome.kind === 'pass') return undefined
   if (outcome.kind === 'sibling') return { name, path, state: 'sibling', isStale: outcome.isStale }
@@ -444,22 +448,35 @@ function itemOf(path: string, outcome: Outcome): BandItem | undefined {
 
 // A file the model already holds unchanged: nothing was sent, nothing saved this time.
 // Its conversion is still in the cache, so Save stays on offer.
-function unchangedItem(path: string, outcome: Outcome): BandItem {
+function unchangedItem(path: string, outcome: Outcome): BandDraft {
   const docDir = outcome.kind === 'served' ? outcome.conv.docDir : undefined
   return { name: baseName(path), path, state: 'unchanged', ...(docDir ? { docDir } : {}) }
 }
 
-// The band belongs to the newest prompt. A finished turn marks it stale, and the next
-// prompt clears it at its first event: the engine reads a prompt's @ mentions before it
-// raises prompt.submit, so neither can be relied on to come first.
-async function freshBand($: EngineInterface) {
-  await update($, view, cur => (cur.isBandStale ? { ...cur, isBandStale: false, lastTurn: [], confirmingSave: '' } : cur))
+// The band keeps an item while it is newer than the last BAND_PROMPTS prompts or younger
+// than `bandSeconds`, whichever keeps it longer, so a quick follow-up does not wipe a row
+// the person has not read yet; × closes everything at once. A finished turn marks the
+// band stale, and the next prompt's first event counts the prompt and drops what has aged
+// out: the engine reads a prompt's @ mentions before it raises prompt.submit, so neither
+// can be relied on to come first.
+const BAND_PROMPTS = 2
+async function freshBand($: EngineInterface, cfg: Config) {
+  const now = await $.clock.now()
+  await update($, view, cur => {
+    if (!cur.isBandStale) return cur
+    const prompts = cur.prompts + 1
+    const lastTurn = cur.lastTurn.filter(it => prompts - it.prompt <= BAND_PROMPTS || now - it.at < cfg.bandSeconds * 1000)
+    const confirmingSave = lastTurn.some(it => it.path === cur.confirmingSave) ? cur.confirmingSave : ''
+    return { ...cur, isBandStale: false, prompts, lastTurn, confirmingSave }
+  })
 }
 
-// One item into the band, replacing the same file's earlier one (a pending conversion).
-async function showInBand($: EngineInterface, item: BandItem) {
-  await freshBand($)
-  await update($, view, cur => ({ ...cur, lastTurn: [...cur.lastTurn.filter(it => it.path !== item.path), item] }))
+// One item into the band, replacing the same file's earlier one (a pending conversion),
+// stamped with now and the current prompt.
+async function showInBand($: EngineInterface, cfg: Config, item: BandDraft) {
+  await freshBand($, cfg)
+  const at = await $.clock.now()
+  await update($, view, cur => ({ ...cur, lastTurn: [...cur.lastTurn.filter(it => it.path !== item.path), { ...item, at, prompt: cur.prompts }] }))
 }
 
 async function bumpStats($: EngineInterface, fn: (s: Stats) => Stats) {
@@ -709,7 +726,7 @@ export const register: Register = (on, options) => {
   on('prompt.submit', async ($, e, next) => {
     const v = await read($, view)
     if (isStopped(v)) return next(e)
-    await freshBand($)
+    await freshBand($, cfg)
     pending.clear()
     if (e.command || v.isPaused || v.ready !== 'yes') return next(e)
     const root = await $.session.root()
@@ -728,13 +745,13 @@ export const register: Register = (on, options) => {
       if (!(await $.fs.exists(path).catch(() => false))) continue
       seen.push(path)
       lines.push(plainPathContext(written))
-      await showInBand($, { name: baseName(path), path, state: 'pending' })
+      await showInBand($, cfg, { name: baseName(path), path, state: 'pending' })
       const job = outcomeOf($, cfg, path)
       pending.set(path, job)
       void job
         .then(async outcome => {
           const item = itemOf(path, outcome)
-          if (item) await showInBand($, item)
+          if (item) await showInBand($, cfg, item)
         })
         .catch(() => update($, view, cur => ({ ...cur, lastTurn: cur.lastTurn.filter(it => it.path !== path) })))
         .catch(() => undefined)
@@ -747,18 +764,18 @@ export const register: Register = (on, options) => {
   // `@spec.docx`: converted before the model starts; the band says what it cost.
   on('prompt.mention', async ($, e, next) => {
     if (await isIdle($)) return next(e)
-    await freshBand($)
+    await freshBand($, cfg)
     const outcome = await outcomeOf($, cfg, e.path)
     const item = itemOf(e.path, outcome)
     if (outcome.kind !== 'served' && outcome.kind !== 'sibling') {
-      if (item) await showInBand($, item)
+      if (item) await showInBand($, cfg, item)
       await count($, outcome)
       return next(e)
     }
     const result = await next({ ...e, path: outcome.md })
     // the model holds this markdown already: the engine sent nothing again
     const isUnchanged = result.deny === undefined && result.type === 'already_read_file'
-    if (item) await showInBand($, isUnchanged ? unchangedItem(e.path, outcome) : item)
+    if (item) await showInBand($, cfg, isUnchanged ? unchangedItem(e.path, outcome) : item)
     if (!isUnchanged) await count($, outcome)
     const context = contextOf(e.path, outcome)
     if (result.deny !== undefined || context === undefined) return result
@@ -778,8 +795,8 @@ export const register: Register = (on, options) => {
     const outcome = await (job ?? outcomeOf($, cfg, path))
     // A row for this file is already up (a path written in the prompt), or reads get one.
     const isInBand = (await read($, view)).lastTurn.some(it => it.path === path)
-    const band = async (item: BandItem | undefined) => {
-      if (item && (isInBand || cfg.bandForReads)) await showInBand($, item)
+    const band = async (item: BandDraft | undefined) => {
+      if (item && (isInBand || cfg.bandForReads)) await showInBand($, cfg, item)
     }
     if (outcome.kind !== 'served' && outcome.kind !== 'sibling') {
       await band(itemOf(path, outcome))
@@ -889,7 +906,7 @@ export const register: Register = (on, options) => {
       const marketplace = v.source.kind === 'foreign' ? v.source.marketplace : ''
       const legacy = v.legacy
       const fills: { key: string; label: string; cmd: string }[] = legacy
-        ? [{ key: 'vd-move:remove', label: REMOVE_LABEL, cmd: removeStep(PLUGIN, legacy) }]
+        ? removeSteps(PLUGIN, legacy).map((cmd, i) => ({ key: `vd-move:remove-${i + 1}`, label: REMOVE_LABELS[i] ?? cmd, cmd }))
         : moveSteps(PLUGIN, marketplace).map((cmd, i) => ({ key: `vd-move:${i + 1}`, label: MOVE_LABELS[i] ?? cmd, cmd }))
       rows.push(
         <Box key="vd-stopped" flexDirection="column">

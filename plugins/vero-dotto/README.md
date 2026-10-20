@@ -66,7 +66,7 @@ In the desktop app, where `/plugin` does not run: click **+** next to the prompt
 To check it took, type `/vero-dotto`: it says whether the converters are ready.
 
 **Only from VeroPlugins.** VeroDotto works only when installed from VeroPlugins. A copy
-installed from anywhere else pauses and shows, above the prompt, three buttons that move
+installed from anywhere else pauses and shows, above the prompt, four buttons that move
 it here: press them one after another, pressing Enter after each, then restart Claude
 Code. Your converters and converted documents stay where they are.
 
@@ -143,9 +143,11 @@ file paths written in your message, starts converting them in the background, an
 Claude the file is available as text. The content reaches Claude only if Claude actually
 opens the file, so "don't touch spec.docx" is safe.
 
-**Or let Claude find it.** When Claude opens a document by itself, it gets the text too.
-No row is shown for those by default (Claude reads many files); they count in
-`/vero-dotto stats`, and the **bandForReads** option shows them.
+**Or let Claude find it.** When Claude opens a document by itself, it gets the text too,
+and the row above the prompt shows the saving just the same. Turn the **bandForReads**
+option off to keep the row for documents named in your prompt only; every conversion
+counts in `/vero-dotto stats` either way. The row stays through your next two prompts, or
+two minutes, whichever is longer (**bandSeconds**); × closes it at once.
 
 **Claude is told once.** Each session starts with one short note asking Claude to open
 documents the normal way rather than unzipping or scripting them. If Claude does script
@@ -209,7 +211,8 @@ In `/config`, under VeroDotto:
 | `maxSheetCells` | 5000 | a spreadsheet with a sheet over this many cells is summarised |
 | `maxSheetRows` | 20 | rows per sheet a summary shows |
 | `maxTokens` | 50000 | a spreadsheet whose text is estimated above this is summarised |
-| `bandForReads` | off | on: the row also appears for documents Claude opened itself |
+| `bandForReads` | on | off: the row appears only for documents named in your prompt |
+| `bandSeconds` | 120 | the row stays through the next two prompts, or this many seconds, whichever is longer |
 | `cacheDays` | 10 | conversions unused this long are removed by the daily clean-up |
 | `cacheMaxMb` | 100 | past this size the least recently used conversions are removed |
 | `convertTimeoutSec` | 100 | a conversion that takes longer is stopped and the original is read |

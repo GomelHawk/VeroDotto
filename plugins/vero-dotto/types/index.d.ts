@@ -27,6 +27,10 @@ export type Meta = {
 export type BandItem = {
   name: string
   path: string
+  // when the row got this item ($.clock.now(), ms) and at which prompt (View.prompts):
+  // an item stays while it is younger than `bandSeconds` or newer than the last two prompts
+  at: number
+  prompt: number
   state: 'converted' | 'sibling' | 'kept' | 'pending' | 'unchanged'
   reason?: 'small-saving' | 'little-text' | 'doc' | 'preparing' | 'not-ready' | 'failed' | 'empty' | 'too-large'
   mdTokens?: number
@@ -81,8 +85,10 @@ export type View = {
   // setup another session runs), seconds since it started, and whether the person closed
   // the row of a failed setup
   // the band shows a turn that has ended: the next prompt's first mention, Read or the
-  // prompt itself (whichever the engine raises first) clears it
+  // prompt itself (whichever the engine raises first) drops what has aged out of it
   isBandStale: boolean
+  // prompts seen so far (counted at each prompt's first event after a finished turn)
+  prompts: number
   setupStep: string
   setupElapsed: number
   isSetupNoteHidden: boolean
